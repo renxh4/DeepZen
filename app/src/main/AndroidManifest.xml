@@ -23,13 +23,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity
-            android:name=".GuardActivity"
-            android:exported="false"
-            android:excludeFromRecents="true"
-            android:launchMode="singleInstance"
-            android:taskAffinity=""
-            android:theme="@style/Theme.DeepZen" />
         <service
             android:name=".FocusAccessibilityService"
             android:enabled="true"
@@ -42,10 +35,6 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
         </service>
-        <service
-            android:name=".FocusOverlayService"
-            android:enabled="true"
-            android:exported="false" />
     </application>
 
 </manifest>
