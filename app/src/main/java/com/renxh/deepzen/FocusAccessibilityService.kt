@@ -86,6 +86,9 @@ class FocusAccessibilityService : AccessibilityService() {
         if (isWhitelistedPackage(pkg)) {
             removeOverlay()
         } else {
+            if (overlayView == null) {
+                bringMainActivityToFront()
+            }
             showOverlay()
         }
     }
@@ -291,6 +294,16 @@ class FocusAccessibilityService : AccessibilityService() {
         } catch (e: Exception) {
             Toast.makeText(applicationContext, "启动失败", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun bringMainActivityToFront() {
+        val intent = Intent(this, MainActivity::class.java)
+        intent.addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP
+        )
+        startActivity(intent)
     }
 
     private fun formatSeconds(totalSeconds: Int): String {
