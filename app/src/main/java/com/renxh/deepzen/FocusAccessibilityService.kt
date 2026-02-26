@@ -202,6 +202,11 @@ class FocusAccessibilityService : AccessibilityService() {
                     val label = pm.getApplicationLabel(appInfo).toString()
                     val icon = pm.getApplicationIcon(appInfo)
                     val iconView = ImageView(this)
+                    val iconSize = (48 * density).toInt()
+                    val iconLayoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
+                    iconView.layoutParams = iconLayoutParams
+                    iconView.adjustViewBounds = true
+                    iconView.scaleType = ImageView.ScaleType.FIT_CENTER
                     iconView.setImageDrawable(icon)
                     val nameView = TextView(this)
                     nameView.text = label
