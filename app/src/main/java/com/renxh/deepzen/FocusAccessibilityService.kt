@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
@@ -16,7 +17,10 @@ import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 
 class FocusAccessibilityService : AccessibilityService() {
     companion object {
@@ -70,8 +74,20 @@ class FocusAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (!isFocusing) return
-        showOverlay()
+        if (!isFocusing) {
+            removeOverlay()
+            return
+        }
+        if (event == null) {
+            showOverlay()
+            return
+        }
+        val pkg = event.packageName?.toString()
+        if (isWhitelistedPackage(pkg)) {
+            removeOverlay()
+        } else {
+            showOverlay()
+        }
     }
 
     override fun onKeyEvent(event: KeyEvent?): Boolean {
@@ -152,6 +168,58 @@ class FocusAccessibilityService : AccessibilityService() {
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
         )
+        val whitelistLayout = LinearLayout(this)
+        whitelistLayout.orientation = LinearLayout.HORIZONTAL
+        whitelistLayout.gravity = Gravity.CENTER
+        val density = resources.displayMetrics.density
+        val whitelistParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+        )
+        whitelistParams.bottomMargin = (140 * density).toInt()
+        val prefs = getSharedPreferences("focus_prefs", MODE_PRIVATE)
+        val pm = packageManager
+        val packages = listOf(
+            prefs.getString("whitelist_1", null),
+            prefs.getString("whitelist_2", null),
+            prefs.getString("whitelist_3", null)
+        )
+        packages.forEach { pkg ->
+            if (!pkg.isNullOrEmpty()) {
+                val itemLayout = LinearLayout(this)
+                itemLayout.orientation = LinearLayout.VERTICAL
+                itemLayout.gravity = Gravity.CENTER
+                val padding = (8 * density).toInt()
+                itemLayout.setPadding(padding, padding, padding, padding)
+                try {
+                    val appInfo = pm.getApplicationInfo(pkg, 0)
+                    val label = pm.getApplicationLabel(appInfo).toString()
+                    val icon = pm.getApplicationIcon(appInfo)
+                    val iconView = ImageView(this)
+                    iconView.setImageDrawable(icon)
+                    val nameView = TextView(this)
+                    nameView.text = label
+                    nameView.setTextColor(Color.WHITE)
+                    nameView.textSize = 12f
+                    nameView.gravity = Gravity.CENTER
+                    itemLayout.addView(iconView)
+                    itemLayout.addView(nameView)
+                } catch (e: Exception) {
+                    val nameView = TextView(this)
+                    nameView.text = pkg
+                    nameView.setTextColor(Color.WHITE)
+                    nameView.textSize = 12f
+                    nameView.gravity = Gravity.CENTER
+                    itemLayout.addView(nameView)
+                }
+                itemLayout.setOnClickListener {
+                    launchWhitelistApp(pkg)
+                }
+                whitelistLayout.addView(itemLayout)
+            }
+        }
+        view.addView(whitelistLayout, whitelistParams)
         val exitView = TextView(this)
         exitView.text = "紧急退出"
         exitView.textSize = 16f
@@ -183,6 +251,46 @@ class FocusAccessibilityService : AccessibilityService() {
 
     private fun updateTimeText() {
         timeTextView?.text = formatSeconds(remainingSeconds)
+    }
+
+    private fun isWhitelistedPackage(pkg: String?): Boolean {
+        if (pkg.isNullOrEmpty()) return false
+        val prefs = getSharedPreferences("focus_prefs", MODE_PRIVATE)
+        val packages = listOf(
+            prefs.getString("whitelist_1", null),
+            prefs.getString("whitelist_2", null),
+            prefs.getString("whitelist_3", null)
+        )
+        return packages.any { it == pkg }
+    }
+
+    private fun launchWhitelistApp(packageName: String) {
+        val pm = packageManager
+        var intent = pm.getLaunchIntentForPackage(packageName)
+        if (intent == null) {
+            val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+                addCategory(Intent.CATEGORY_LAUNCHER)
+                `package` = packageName
+            }
+            val resolveInfos = pm.queryIntentActivities(mainIntent, 0)
+            val info = resolveInfos.firstOrNull()
+            if (info != null) {
+                intent = Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_LAUNCHER)
+                    setClassName(info.activityInfo.packageName, info.activityInfo.name)
+                }
+            }
+        }
+        if (intent == null) {
+            Toast.makeText(applicationContext, "无法打开该应用", Toast.LENGTH_SHORT).show()
+            return
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            applicationContext.startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(applicationContext, "启动失败", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun formatSeconds(totalSeconds: Int): String {
