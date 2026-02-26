@@ -87,9 +87,7 @@ class FocusAccessibilityService : AccessibilityService() {
         if (isWhitelistedPackage(pkg)) {
             removeOverlay()
         } else {
-            if (overlayView == null) {
-                bringMainActivityToFront()
-            }
+            bringMainActivityToFront()
             showOverlay()
         }
     }
