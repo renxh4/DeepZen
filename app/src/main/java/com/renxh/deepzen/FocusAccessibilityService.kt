@@ -247,7 +247,7 @@ class FocusAccessibilityService : AccessibilityService() {
             FrameLayout.LayoutParams.WRAP_CONTENT,
             Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
         )
-        view.addView(exitView, exitParams)
+//        view.addView(exitView, exitParams)
         wm.addView(view, params)
         overlayView = view
     }
