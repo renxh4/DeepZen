@@ -14,6 +14,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +28,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,7 +47,7 @@ import com.renxh.deepzen.ui.theme.DeepZenTheme
 class MainActivity : ComponentActivity() {
     private var pendingSlot = 0
     private lateinit var pickAppLauncher: ActivityResultLauncher<Intent>
-    private val whitelistPackagesState = mutableStateOf(listOf<String?>(null, null, null))
+    private val whitelistPackagesState = mutableStateOf(listOf<String?>(null, null, null, null, null, null))
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,7 +58,10 @@ class MainActivity : ComponentActivity() {
         whitelistPackagesState.value = listOf(
             prefs.getString("whitelist_1", null),
             prefs.getString("whitelist_2", null),
-            prefs.getString("whitelist_3", null)
+            prefs.getString("whitelist_3", null),
+            prefs.getString("whitelist_4", null),
+            prefs.getString("whitelist_5", null),
+            prefs.getString("whitelist_6", null)
         )
         pickAppLauncher =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -100,11 +105,14 @@ class MainActivity : ComponentActivity() {
         val key = when (slot) {
             0 -> "whitelist_1"
             1 -> "whitelist_2"
-            else -> "whitelist_3"
+            2 -> "whitelist_3"
+            3 -> "whitelist_4"
+            4 -> "whitelist_5"
+            else -> "whitelist_6"
         }
         prefs.edit().putString(key, packageName).apply()
         val current = whitelistPackagesState.value.toMutableList()
-        if (slot in 0..2) {
+        if (slot in 0..5) {
             current[slot] = packageName
             whitelistPackagesState.value = current
         }
@@ -141,7 +149,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun HomeScreen(
     modifier: Modifier = Modifier,
-    whitelistPackages: List<String?> = listOf(null, null, null),
+    whitelistPackages: List<String?> = listOf(null, null, null, null, null, null),
     onStartFocus: (Int) -> Unit = {},
     onSelectWhitelistSlot: (Int) -> Unit = {}
 ) {
@@ -211,11 +219,15 @@ fun HomeScreen(
         Spacer(modifier = androidx.compose.ui.Modifier.height(32.dp))
         Text(text = "白名单应用", color = ComposeColor.White)
         Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             whitelistUi.forEachIndexed { index, (label, iconBitmap) ->
+                val hasApp = !whitelistPackages.getOrNull(index).isNullOrEmpty()
                 OutlinedButton(
                     onClick = { onSelectWhitelistSlot(index) },
-                    border = BorderStroke(1.dp, ComposeColor.White),
+                    border = if (hasApp) null else BorderStroke(1.dp, ComposeColor.White),
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = ComposeColor.White
                     )

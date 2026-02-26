@@ -17,6 +17,7 @@ import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -186,7 +187,10 @@ class FocusAccessibilityService : AccessibilityService() {
         val packages = listOf(
             prefs.getString("whitelist_1", null),
             prefs.getString("whitelist_2", null),
-            prefs.getString("whitelist_3", null)
+            prefs.getString("whitelist_3", null),
+            prefs.getString("whitelist_4", null),
+            prefs.getString("whitelist_5", null),
+            prefs.getString("whitelist_6", null)
         )
         packages.forEach { pkg ->
             if (!pkg.isNullOrEmpty()) {
@@ -222,7 +226,10 @@ class FocusAccessibilityService : AccessibilityService() {
                 whitelistLayout.addView(itemLayout)
             }
         }
-        view.addView(whitelistLayout, whitelistParams)
+        val scrollView = HorizontalScrollView(this)
+        scrollView.isHorizontalScrollBarEnabled = false
+        scrollView.addView(whitelistLayout)
+        view.addView(scrollView, whitelistParams)
         val exitView = TextView(this)
         exitView.text = "紧急退出"
         exitView.textSize = 16f
@@ -262,7 +269,10 @@ class FocusAccessibilityService : AccessibilityService() {
         val packages = listOf(
             prefs.getString("whitelist_1", null),
             prefs.getString("whitelist_2", null),
-            prefs.getString("whitelist_3", null)
+            prefs.getString("whitelist_3", null),
+            prefs.getString("whitelist_4", null),
+            prefs.getString("whitelist_5", null),
+            prefs.getString("whitelist_6", null)
         )
         return packages.any { it == pkg }
     }
