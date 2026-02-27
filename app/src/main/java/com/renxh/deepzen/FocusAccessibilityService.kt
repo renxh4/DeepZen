@@ -5,7 +5,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
@@ -22,6 +21,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 
 class FocusAccessibilityService : AccessibilityService() {
     companion object {
@@ -71,7 +71,12 @@ class FocusAccessibilityService : AccessibilityService() {
             addAction(ACTION_START_FOCUS)
             addAction(ACTION_STOP_FOCUS)
         }
-        registerReceiver(focusReceiver, filter)
+        ContextCompat.registerReceiver(
+            this,
+            focusReceiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
