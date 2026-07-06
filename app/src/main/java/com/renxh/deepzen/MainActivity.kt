@@ -1,6 +1,7 @@
 package com.renxh.deepzen
 
 import android.app.Activity
+import android.app.DatePickerDialog
 import android.content.ComponentName
 import android.content.Intent
 import android.graphics.Color
@@ -16,20 +17,29 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,11 +53,18 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.renxh.deepzen.ui.theme.DeepZenTheme
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     private var pendingSlot = 0
     private lateinit var pickAppLauncher: ActivityResultLauncher<Intent>
     private val whitelistPackagesState = mutableStateOf(listOf<String?>(null, null, null, null, null, null))
+    private val calendarRecordsState = mutableStateOf<List<Long>>(emptyList())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,6 +80,12 @@ class MainActivity : ComponentActivity() {
             prefs.getString("whitelist_5", null),
             prefs.getString("whitelist_6", null)
         )
+        calendarRecordsState.value = loadCalendarRecords()
+        val autoFocusDurationDays = if (savedInstanceState == null) {
+            getAutoFocusDurationDays(calendarRecordsState.value)
+        } else {
+            null
+        }
         pickAppLauncher =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
                 if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
@@ -73,23 +96,138 @@ class MainActivity : ComponentActivity() {
             }
         setContent {
             DeepZenTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    HomeScreen(
-                        modifier = Modifier
-                            .padding(innerPadding)
-                            .fillMaxSize(),
-                        whitelistPackages = whitelistPackagesState.value,
-                        onStartFocus = { minutes ->
-                            handleStartFocus(minutes)
+                var selectedTab by remember { mutableStateOf(MainTab.Focus) }
+                var autoFocusDialogState by remember {
+                    mutableStateOf(autoFocusDurationDays?.let { AutoFocusDialogState(5, it) })
+                }
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    bottomBar = {
+                        NavigationBar(containerColor = ComposeColor.Black) {
+                            NavigationBarItem(
+                                selected = selectedTab == MainTab.Focus,
+                                onClick = { selectedTab = MainTab.Focus },
+                                label = { Text(text = "专注") },
+                                icon = {}
+                            )
+                            NavigationBarItem(
+                                selected = selectedTab == MainTab.Calendar,
+                                onClick = { selectedTab = MainTab.Calendar },
+                                label = { Text(text = "日历") },
+                                icon = {}
+                            )
+                        }
+                    }
+                ) { innerPadding ->
+                    when (selectedTab) {
+                        MainTab.Focus -> HomeScreen(
+                            modifier = Modifier
+                                .padding(innerPadding)
+                                .fillMaxSize(),
+                            whitelistPackages = whitelistPackagesState.value,
+                            onStartFocus = { minutes ->
+                                handleStartFocus(minutes)
+                            },
+                            onSelectWhitelistSlot = { index ->
+                                openAppPicker(index)
+                            }
+                        )
+
+                        MainTab.Calendar -> CalendarScreen(
+                            modifier = Modifier
+                                .padding(innerPadding)
+                                .fillMaxSize(),
+                            records = calendarRecordsState.value,
+                            onPickDate = {
+                                openDatePicker()
+                            }
+                        )
+                    }
+                }
+                val dialogState = autoFocusDialogState
+                if (dialogState != null) {
+                    LaunchedEffect(dialogState.durationDays) {
+                        for (remaining in 5 downTo 1) {
+                            autoFocusDialogState = autoFocusDialogState?.copy(seconds = remaining)
+                            delay(1000)
+                        }
+                        autoFocusDialogState = null
+                        handleStartFocus(5)
+                    }
+                    AutoFocusCountdownDialog(
+                        seconds = dialogState.seconds,
+                        durationDays = dialogState.durationDays,
+                        onConfirm = {
+                            autoFocusDialogState = null
+                            handleStartFocus(5)
                         },
-                        onSelectWhitelistSlot = { index ->
-                            openAppPicker(index)
+                        onCancel = {
+                            autoFocusDialogState = null
                         }
                     )
                 }
             }
         }
     }
+
+    private fun openDatePicker() {
+        val calendar = Calendar.getInstance()
+        DatePickerDialog(
+            this,
+            { _, year, month, dayOfMonth ->
+                val selectedDate = Calendar.getInstance().apply {
+                    set(Calendar.YEAR, year)
+                    set(Calendar.MONTH, month)
+                    set(Calendar.DAY_OF_MONTH, dayOfMonth)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+                saveCalendarRecord(selectedDate.timeInMillis)
+            },
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH),
+            calendar.get(Calendar.DAY_OF_MONTH)
+        ).show()
+    }
+
+    private fun loadCalendarRecords(): List<Long> {
+        val raw = getSharedPreferences("focus_prefs", MODE_PRIVATE)
+            .getString("calendar_records", null)
+            ?: return emptyList()
+        return raw.split(",")
+            .mapNotNull { it.toLongOrNull() }
+            .distinct()
+            .sorted()
+    }
+
+    private fun saveCalendarRecord(timeMillis: Long) {
+        val records = (calendarRecordsState.value + timeMillis)
+            .distinct()
+            .sorted()
+        getSharedPreferences("focus_prefs", MODE_PRIVATE)
+            .edit()
+            .putString("calendar_records", records.joinToString(","))
+            .apply()
+        calendarRecordsState.value = records
+    }
+
+    private fun getAutoFocusDurationDays(records: List<Long>): Long? {
+        val latestRecord = records.maxOrNull() ?: return null
+        val durationDays = elapsedDaysSince(latestRecord)
+        return durationDays.takeIf { it < 7 }
+    }
+
+    private enum class MainTab {
+        Focus,
+        Calendar
+    }
+
+    private data class AutoFocusDialogState(
+        val seconds: Int,
+        val durationDays: Long
+    )
 
     private fun openAppPicker(slot: Int) {
         pendingSlot = slot
@@ -249,10 +387,223 @@ fun HomeScreen(
     }
 }
 
+@Composable
+private fun AutoFocusCountdownDialog(
+    seconds: Int,
+    durationDays: Long,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = {},
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ComposeColor.White,
+                    contentColor = ComposeColor.Black
+                )
+            ) {
+                Text(text = "确认")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onCancel,
+                border = BorderStroke(1.dp, ComposeColor.White),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = ComposeColor.White
+                )
+            ) {
+                Text(text = "取消")
+            }
+        },
+        containerColor = ComposeColor(0xFF171717),
+        title = {
+            Text(text = "即将开始专注", color = ComposeColor.White)
+        },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "已经坚持 ${durationDays}天",
+                    color = ComposeColor.White
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "${seconds}s",
+                    color = ComposeColor.White
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "5秒后自动开始5分钟专注",
+                    color = ComposeColor(0xFFBDBDBD)
+                )
+            }
+        }
+    )
+}
+
+@Composable
+fun CalendarScreen(
+    modifier: Modifier = Modifier,
+    records: List<Long> = emptyList(),
+    onPickDate: () -> Unit = {}
+) {
+    val sortedRecords = records.sorted()
+    val displayRecords = sortedRecords.mapIndexed { index, record ->
+        record to sortedRecords.getOrNull(index - 1)
+    }.asReversed()
+    val latestDurationDays = remember(sortedRecords) {
+        sortedRecords.lastOrNull()?.let { latestRecord ->
+            elapsedDaysSince(latestRecord)
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .background(ComposeColor.Black)
+            .padding(horizontal = 20.dp, vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(text = "坚持统计", color = ComposeColor.White)
+        Spacer(modifier = Modifier.height(12.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(ComposeColor(0xFF171717))
+                .padding(20.dp)
+        ) {
+            Column {
+                Text(
+                    text = "这次和上次坚持了多久",
+                    color = ComposeColor(0xFFBDBDBD)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = latestDurationDays?.let { "${it}天" } ?: "暂无记录",
+                    color = ComposeColor.White
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(20.dp))
+        Button(
+            onClick = onPickDate,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = ComposeColor.White,
+                contentColor = ComposeColor.Black
+            )
+        ) {
+            Text(text = "选择时间")
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = "选择记录",
+            color = ComposeColor.White,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        if (displayRecords.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(text = "暂无选择时间", color = ComposeColor(0xFFBDBDBD))
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(0.dp)
+            ) {
+                itemsIndexed(displayRecords) { index, (record, previous) ->
+                    CalendarRecordRow(
+                        dateMillis = record,
+                        durationDays = previous?.let { daysBetween(it, record) }
+                    )
+                    if (index != displayRecords.lastIndex) {
+                        HorizontalDivider(color = ComposeColor(0xFF2A2A2A))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalendarRecordRow(
+    dateMillis: Long,
+    durationDays: Long?
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column {
+            Text(text = formatDate(dateMillis), color = ComposeColor.White)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "坚持时间",
+                color = ComposeColor(0xFFBDBDBD)
+            )
+        }
+        Text(
+            text = durationDays?.let { "${it}天" } ?: "首次记录",
+            color = ComposeColor.White
+        )
+    }
+}
+
+private fun formatDate(timeMillis: Long): String {
+    return SimpleDateFormat("yyyy年MM月dd日", Locale.CHINA).format(Date(timeMillis))
+}
+
+private fun daysBetween(startMillis: Long, endMillis: Long): Long {
+    val start = Calendar.getInstance().apply {
+        timeInMillis = startMillis
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    val end = Calendar.getInstance().apply {
+        timeInMillis = endMillis
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    return TimeUnit.MILLISECONDS.toDays(end.timeInMillis - start.timeInMillis)
+}
+
+private fun elapsedDaysSince(timeMillis: Long): Long {
+    return TimeUnit.MILLISECONDS.toDays(System.currentTimeMillis() - timeMillis)
+}
+
 @Preview(showBackground = true)
 @Composable
 fun HomeScreenPreview() {
     DeepZenTheme {
         HomeScreen()
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun CalendarScreenPreview() {
+    DeepZenTheme {
+        CalendarScreen(
+            records = listOf(
+                Calendar.getInstance().apply {
+                    set(2026, Calendar.JULY, 1)
+                }.timeInMillis,
+                Calendar.getInstance().apply {
+                    set(2026, Calendar.JULY, 6)
+                }.timeInMillis
+            )
+        )
     }
 }
