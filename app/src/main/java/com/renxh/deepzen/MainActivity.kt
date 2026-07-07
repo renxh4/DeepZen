@@ -71,6 +71,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var pickAppLauncher: ActivityResultLauncher<Intent>
     private val whitelistPackagesState = mutableStateOf(List<String?>(WHITELIST_SLOT_COUNT) { null })
     private val calendarRecordsState = mutableStateOf<List<Long>>(emptyList())
+    private val autoFocusDialogState = mutableStateOf<AutoFocusDialogState?>(null)
+    private var autoFocusTriggerId = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,11 +82,6 @@ class MainActivity : ComponentActivity() {
         val prefs = getSharedPreferences("focus_prefs", MODE_PRIVATE)
         whitelistPackagesState.value = loadWhitelistPackages(prefs)
         calendarRecordsState.value = loadCalendarRecords()
-        val autoFocusDurationDays = if (savedInstanceState == null) {
-            getAutoFocusDurationDays(calendarRecordsState.value)
-        } else {
-            null
-        }
         pickAppLauncher =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
                 if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
@@ -96,9 +93,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             DeepZenTheme {
                 var selectedTab by remember { mutableStateOf(MainTab.Focus) }
-                var autoFocusDialogState by remember {
-                    mutableStateOf(autoFocusDurationDays?.let { AutoFocusDialogState(5, it) })
-                }
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     bottomBar = {
@@ -143,29 +137,42 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
-                val dialogState = autoFocusDialogState
+                val dialogState = autoFocusDialogState.value
                 if (dialogState != null) {
-                    LaunchedEffect(dialogState.durationDays) {
+                    LaunchedEffect(dialogState.triggerId) {
                         for (remaining in 5 downTo 1) {
-                            autoFocusDialogState = autoFocusDialogState?.copy(seconds = remaining)
+                            autoFocusDialogState.value = autoFocusDialogState.value?.copy(seconds = remaining)
                             delay(1000)
                         }
-                        autoFocusDialogState = null
+                        autoFocusDialogState.value = null
                         handleStartFocus(5)
                     }
                     AutoFocusCountdownDialog(
                         seconds = dialogState.seconds,
                         durationDays = dialogState.durationDays,
                         onConfirm = {
-                            autoFocusDialogState = null
+                            autoFocusDialogState.value = null
                             handleStartFocus(5)
                         },
                         onCancel = {
-                            autoFocusDialogState = null
+                            autoFocusDialogState.value = null
                         }
                     )
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        calendarRecordsState.value = loadCalendarRecords()
+        val durationDays = getAutoFocusDurationDays(calendarRecordsState.value)
+        autoFocusDialogState.value = durationDays?.let {
+            AutoFocusDialogState(
+                seconds = 5,
+                durationDays = it,
+                triggerId = ++autoFocusTriggerId
+            )
         }
     }
 
@@ -233,7 +240,8 @@ class MainActivity : ComponentActivity() {
 
     private data class AutoFocusDialogState(
         val seconds: Int,
-        val durationDays: Long
+        val durationDays: Long,
+        val triggerId: Int
     )
 
     private fun openAppPicker(slot: Int) {
