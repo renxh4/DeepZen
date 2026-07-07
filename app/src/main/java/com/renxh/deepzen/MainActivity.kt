@@ -15,7 +15,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +25,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.AlertDialog
@@ -37,7 +39,6 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,9 +62,13 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
+    private companion object {
+        const val WHITELIST_SLOT_COUNT = 9
+    }
+
     private var pendingSlot = 0
     private lateinit var pickAppLauncher: ActivityResultLauncher<Intent>
-    private val whitelistPackagesState = mutableStateOf(listOf<String?>(null, null, null, null, null, null))
+    private val whitelistPackagesState = mutableStateOf(List<String?>(WHITELIST_SLOT_COUNT) { null })
     private val calendarRecordsState = mutableStateOf<List<Long>>(emptyList())
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,14 +77,7 @@ class MainActivity : ComponentActivity() {
         window.statusBarColor = Color.BLACK
         window.navigationBarColor = Color.BLACK
         val prefs = getSharedPreferences("focus_prefs", MODE_PRIVATE)
-        whitelistPackagesState.value = listOf(
-            prefs.getString("whitelist_1", null),
-            prefs.getString("whitelist_2", null),
-            prefs.getString("whitelist_3", null),
-            prefs.getString("whitelist_4", null),
-            prefs.getString("whitelist_5", null),
-            prefs.getString("whitelist_6", null)
-        )
+        whitelistPackagesState.value = loadWhitelistPackages(prefs)
         calendarRecordsState.value = loadCalendarRecords()
         val autoFocusDurationDays = if (savedInstanceState == null) {
             getAutoFocusDurationDays(calendarRecordsState.value)
@@ -213,6 +211,14 @@ class MainActivity : ComponentActivity() {
         calendarRecordsState.value = records
     }
 
+    private fun loadWhitelistPackages(
+        prefs: android.content.SharedPreferences
+    ): List<String?> {
+        return (1..WHITELIST_SLOT_COUNT).map { index ->
+            prefs.getString("whitelist_$index", null)
+        }
+    }
+
     private fun getAutoFocusDurationDays(records: List<Long>): Long? {
         val latestRecord = records.maxOrNull() ?: return null
         val durationDays = elapsedDaysSince(latestRecord)
@@ -240,17 +246,10 @@ class MainActivity : ComponentActivity() {
 
     private fun saveWhitelistApp(slot: Int, packageName: String) {
         val prefs = getSharedPreferences("focus_prefs", MODE_PRIVATE)
-        val key = when (slot) {
-            0 -> "whitelist_1"
-            1 -> "whitelist_2"
-            2 -> "whitelist_3"
-            3 -> "whitelist_4"
-            4 -> "whitelist_5"
-            else -> "whitelist_6"
-        }
+        val key = "whitelist_${slot + 1}"
         prefs.edit().putString(key, packageName).apply()
         val current = whitelistPackagesState.value.toMutableList()
-        if (slot in 0..5) {
+        if (slot in 0 until WHITELIST_SLOT_COUNT) {
             current[slot] = packageName
             whitelistPackagesState.value = current
         }
@@ -287,7 +286,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun HomeScreen(
     modifier: Modifier = Modifier,
-    whitelistPackages: List<String?> = listOf(null, null, null, null, null, null),
+    whitelistPackages: List<String?> = List(9) { null },
     onStartFocus: (Int) -> Unit = {},
     onSelectWhitelistSlot: (Int) -> Unit = {}
 ) {
@@ -357,20 +356,25 @@ fun HomeScreen(
         Spacer(modifier = androidx.compose.ui.Modifier.height(32.dp))
         Text(text = "白名单应用", color = ComposeColor.White)
         Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(230.dp)
+                .padding(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            whitelistUi.forEachIndexed { index, (label, iconBitmap) ->
+            itemsIndexed(whitelistUi) { index, (label, iconBitmap) ->
                 val hasApp = !whitelistPackages.getOrNull(index).isNullOrEmpty()
-                OutlinedButton(
-                    onClick = { onSelectWhitelistSlot(index) },
-                    border = if (hasApp) null else BorderStroke(1.dp, ComposeColor.White),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = ComposeColor.White
-                    )
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                if (hasApp) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(64.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
                         if (iconBitmap != null) {
                             Image(
                                 bitmap = iconBitmap,
@@ -379,7 +383,20 @@ fun HomeScreen(
                             )
                             Spacer(modifier = androidx.compose.ui.Modifier.height(4.dp))
                         }
-                        Text(text = label)
+                        Text(text = label, color = ComposeColor.White)
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = { onSelectWhitelistSlot(index) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        border = BorderStroke(1.dp, ComposeColor.White),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = ComposeColor.White
+                        )
+                    ) {
+                        Text(text = "选择应用")
                     }
                 }
             }

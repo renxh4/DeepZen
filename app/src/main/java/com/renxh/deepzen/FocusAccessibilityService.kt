@@ -28,6 +28,7 @@ class FocusAccessibilityService : AccessibilityService() {
         const val ACTION_START_FOCUS = "com.renxh.deepzen.action.START_FOCUS"
         const val ACTION_STOP_FOCUS = "com.renxh.deepzen.action.STOP_FOCUS"
         private const val DEFAULT_DURATION_SECONDS = 5 * 60
+        private const val WHITELIST_SLOT_COUNT = 9
     }
 
     private var windowManager: WindowManager? = null
@@ -185,16 +186,8 @@ class FocusAccessibilityService : AccessibilityService() {
             Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
         )
         whitelistParams.bottomMargin = (140 * density).toInt()
-        val prefs = getSharedPreferences("focus_prefs", MODE_PRIVATE)
         val pm = packageManager
-        val packages = listOf(
-            prefs.getString("whitelist_1", null),
-            prefs.getString("whitelist_2", null),
-            prefs.getString("whitelist_3", null),
-            prefs.getString("whitelist_4", null),
-            prefs.getString("whitelist_5", null),
-            prefs.getString("whitelist_6", null)
-        )
+        val packages = loadWhitelistPackages()
         packages.forEach { pkg ->
             if (!pkg.isNullOrEmpty()) {
                 val itemLayout = LinearLayout(this)
@@ -273,16 +266,15 @@ class FocusAccessibilityService : AccessibilityService() {
 
     private fun isWhitelistedPackage(pkg: String?): Boolean {
         if (pkg.isNullOrEmpty()) return false
-        val prefs = getSharedPreferences("focus_prefs", MODE_PRIVATE)
-        val packages = listOf(
-            prefs.getString("whitelist_1", null),
-            prefs.getString("whitelist_2", null),
-            prefs.getString("whitelist_3", null),
-            prefs.getString("whitelist_4", null),
-            prefs.getString("whitelist_5", null),
-            prefs.getString("whitelist_6", null)
-        )
+        val packages = loadWhitelistPackages()
         return packages.any { it == pkg }
+    }
+
+    private fun loadWhitelistPackages(): List<String?> {
+        val prefs = getSharedPreferences("focus_prefs", MODE_PRIVATE)
+        return (1..WHITELIST_SLOT_COUNT).map { index ->
+            prefs.getString("whitelist_$index", null)
+        }
     }
 
     private fun launchWhitelistApp(packageName: String) {
